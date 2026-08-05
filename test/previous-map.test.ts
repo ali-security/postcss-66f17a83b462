@@ -4,6 +4,7 @@ import {
   mkdirSync,
   readdirSync,
   rmdirSync,
+  symlinkSync,
   unlinkSync,
   writeFileSync
 } from 'fs'
@@ -35,6 +36,29 @@ function deleteDir(path: string): void {
         unlinkSync(file)
       }
     })
+    rmdirSync(path)
+  }
+}
+
+function createSymlink(
+  target: string,
+  path: string,
+  type: 'dir' | 'file' | 'junction'
+): boolean {
+  try {
+    symlinkSync(target, path, type)
+    return true
+  } catch {
+    // Windows without Developer Mode or admin rights forbids symlinks
+    return false
+  }
+}
+
+function removeSymlink(path: string): void {
+  try {
+    unlinkSync(path)
+  } catch {
+    // Windows needs rmdir() to remove a directory symlink or a junction
     rmdirSync(path)
   }
 }
@@ -444,6 +468,67 @@ test('loads map from outside the from folder with unsafeMap', () => {
     unsafeMap: true
   }).source?.input
   is(input?.map.text, map)
+})
+
+test('does not load missing map', () => {
+  let from = join(dir, 'a.css')
+  mkdirSync(dir)
+  let input = parse('a{}\n/*# sourceMappingURL=missing.map */', { from }).source
+    ?.input
+  type(input?.map, 'undefined')
+})
+
+test('does not load map from symlink to outside the from folder', () => {
+  let from = join(dir, 'subdir', 'a.css')
+  mkdirSync(join(dir, 'subdir'), { recursive: true })
+  writeFileSync(join(dir, 'outside.map'), map)
+  let link = join(dir, 'subdir', 'link.map')
+  if (!createSymlink(join(dir, 'outside.map'), link, 'file')) return
+  let input = parse('a{}\n/*# sourceMappingURL=link.map */', { from }).source
+    ?.input
+  type(input?.map, 'undefined')
+})
+
+test('does not load map through symlinked folder', () => {
+  let from = join(dir, 'subdir', 'a.css')
+  mkdirSync(join(dir, 'subdir'), { recursive: true })
+  mkdirSync(join(dir, 'outside'))
+  writeFileSync(join(dir, 'outside', 'a.map'), map)
+  let link = join(dir, 'subdir', 'link')
+  if (!createSymlink(join(dir, 'outside'), link, 'junction')) return
+  try {
+    let input = parse('a{}\n/*# sourceMappingURL=link/a.map */', { from })
+      .source?.input
+    type(input?.map, 'undefined')
+  } finally {
+    removeSymlink(link)
+  }
+})
+
+test('loads map from symlink inside the from folder', () => {
+  let from = join(dir, 'a.css')
+  mkdirSync(dir)
+  writeFileSync(join(dir, 'real.map'), map)
+  let link = join(dir, 'a.css.map')
+  if (!createSymlink(join(dir, 'real.map'), link, 'file')) return
+  let input = parse('a{}\n/*# sourceMappingURL=a.css.map */', { from }).source
+    ?.input
+  is(input?.map.text, map)
+})
+
+test('loads map when the from folder is a symlink', () => {
+  mkdirSync(join(dir, 'real'), { recursive: true })
+  writeFileSync(join(dir, 'real', 'a.map'), map)
+  let link = join(dir, 'link')
+  if (!createSymlink(join(dir, 'real'), link, 'junction')) return
+  try {
+    let input = parse('a{}\n/*# sourceMappingURL=a.map */', {
+      from: join(link, 'a.css')
+    }).source?.input
+    is(input?.map.text, map)
+  } finally {
+    removeSymlink(link)
+  }
 })
 
 test('uses current file path for source map', () => {
