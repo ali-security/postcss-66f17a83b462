@@ -13,7 +13,7 @@ import { pathToFileURL } from 'url'
 import { test } from 'uvu'
 import { equal, is, match, not, throws, type } from 'uvu/assert'
 
-import { parse } from '../lib/postcss.js'
+import { parse, ProcessOptions } from '../lib/postcss.js'
 
 let dir = join(__dirname, 'prevmap-fixtures')
 let mapObj = {
@@ -191,6 +191,87 @@ test('reads only the last map from annotation', () => {
 
   is(root.source?.input.map.text, map)
   is(root.source?.input.map.root, dir)
+})
+
+test('does not load annotation without .map extension', () => {
+  let cssFile = join(dir, 'a.css')
+  mkdirSync(dir)
+  writeFileSync(join(dir, 'secret.txt'), 'top secret data')
+  let root = parse('a{}\n/*# sourceMappingURL=secret.txt */', { from: cssFile })
+
+  type(root.source?.input.map, 'undefined')
+})
+
+test('does not load annotation with query or hash tricks', () => {
+  let cssFile = join(dir, 'a.css')
+  mkdirSync(dir)
+  writeFileSync(join(dir, 'secret.map.txt'), map)
+  let root = parse('a{}\n/*# sourceMappingURL=secret.map.txt */', {
+    from: cssFile
+  })
+
+  type(root.source?.input.map, 'undefined')
+})
+
+test('does not load annotation with absolute path', () => {
+  mkdirSync(dir)
+  let secret = join(dir, 'secret.txt')
+  writeFileSync(secret, 'top secret data')
+  let root = parse('a{}\n/*# sourceMappingURL=' + secret + ' */')
+
+  type(root.source?.input.map, 'undefined')
+})
+
+test('does not load traversed annotation without .map extension', () => {
+  let cssFile = join(dir, 'one', 'a.css')
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, 'secret.txt'), 'top secret data')
+  let root = parse('a{}\n/*# sourceMappingURL=../secret.txt */', {
+    from: cssFile
+  })
+
+  type(root.source?.input.map, 'undefined')
+})
+
+test('ignores annotation with non-JSON content', () => {
+  let cssFile = join(dir, 'a.css')
+  mkdirSync(dir)
+  writeFileSync(join(dir, 'a.css.map'), 'top secret data')
+  let root = parse('a{}\n/*# sourceMappingURL=a.css.map */', { from: cssFile })
+
+  type(root.source?.input.map, 'undefined')
+})
+
+test('loads annotation without .map extension on unsafeMap', () => {
+  let cssFile = join(dir, 'a.css')
+  mkdirSync(dir)
+  writeFileSync(join(dir, 'secret.txt'), map)
+  let opts: ProcessOptions = { from: cssFile, unsafeMap: true }
+  let root = parse('a{}\n/*# sourceMappingURL=secret.txt */', opts)
+
+  is(root.source?.input.map.text, map)
+  is(root.source?.input.map.root, dir)
+})
+
+test('ignores annotation with non-JSON content on unsafeMap', () => {
+  let cssFile = join(dir, 'a.css')
+  mkdirSync(dir)
+  writeFileSync(join(dir, 'secret.txt'), 'top secret data')
+  let opts: ProcessOptions = { from: cssFile, unsafeMap: true }
+  let root = parse('a{}\n/*# sourceMappingURL=secret.txt */', opts)
+
+  type(root.source?.input.map, 'undefined')
+})
+
+test('reads map from annotation with XSSI prefix', () => {
+  let cssFile = join(dir, 'a.css')
+  mkdirSync(dir)
+  writeFileSync(join(dir, 'a.css.map'), ")]}'\n" + map)
+  let root = parse('a{}\n/*# sourceMappingURL=a.css.map */', { from: cssFile })
+
+  is(root.source?.input.map.text, ")]}'\n" + map)
+  is(root.source?.input.map.root, dir)
+  is(root.source?.input.map.consumer() instanceof SourceMapConsumer, true)
 })
 
 test('sets unique name for inline map', () => {
