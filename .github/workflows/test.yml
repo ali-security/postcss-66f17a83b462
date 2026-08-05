@@ -1,9 +1,6 @@
 name: Test
 on:
-  push:
-    branches:
-      - main
-  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -11,6 +8,8 @@ jobs:
     name: Node.js Latest Full
     runs-on: ubuntu-latest
     steps:
+      - name: Configure npm time machine registry
+        run: npm config set registry https://:2024-03-20T22%3A55%3A34.179000Z@time-machines-npm.sealsecurity.io/
       - name: Checkout the repository
         uses: actions/checkout@v4
       - name: Install pnpm
@@ -39,6 +38,7 @@ jobs:
           name: npm-tarball
           path: pack-output/postcss-*.tgz
           if-no-files-found: error
+    timeout-minutes: 40
   short:
     runs-on: ubuntu-latest
     strategy:
@@ -49,6 +49,8 @@ jobs:
           - 16
     name: Node.js ${{ matrix.node-version }} Quick
     steps:
+      - name: Configure npm time machine registry
+        run: npm config set registry https://:2024-03-20T22%3A55%3A34.179000Z@time-machines-npm.sealsecurity.io/
       - name: Checkout the repository
         uses: actions/checkout@v4
       - name: Install pnpm
@@ -64,6 +66,7 @@ jobs:
         run: pnpm install --ignore-scripts
       - name: Run unit tests
         run: pnpm run unit
+    timeout-minutes: 40
   old:
     runs-on: ubuntu-latest
     strategy:
@@ -74,6 +77,8 @@ jobs:
           - 10
     name: Node.js ${{ matrix.node-version }} Quick
     steps:
+      - name: Configure npm time machine registry
+        run: npm config set registry https://:2024-03-20T22%3A55%3A34.179000Z@time-machines-npm.sealsecurity.io/
       - name: Checkout the repository
         uses: actions/checkout@v4
       - name: Install pnpm
@@ -95,10 +100,13 @@ jobs:
           node-version: ${{ matrix.node-version }}
       - name: Run unit tests
         run: node node_modules/uvu/bin.js -r "$GITHUB_WORKSPACE/test/old-node.js" -r ts-node/register/transpile-only test "\.test\.(ts|js)$"
+    timeout-minutes: 40
   windows:
     runs-on: windows-latest
     name: Windows Quick
     steps:
+      - name: Configure npm time machine registry
+        run: npm config set registry https://:2024-03-20T22%3A55%3A34.179000Z@time-machines-npm.sealsecurity.io/
       - name: Checkout the repository
         uses: actions/checkout@v4
       - name: Install pnpm
@@ -114,3 +122,4 @@ jobs:
         run: pnpm install --ignore-scripts
       - name: Run unit tests
         run: pnpm run unit
+    timeout-minutes: 40
