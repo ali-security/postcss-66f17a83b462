@@ -285,4 +285,68 @@ test('handles document with three roots, with before and after raws', () => {
   is(s, 'a.one {}AFTER_ONEa.two {}AFTER_TWOa.three {}AFTER_THREE')
 })
 
+test('escapes </style & <!-- with \\3c CSS escape', () => {
+  let root = new Root()
+  root.append(new Rule({ selector: '</style>' }))
+  root.append(new AtRule({ name: 'media', params: '<style>' }))
+  root.append({ text: '</style><!--<style>' })
+  let rule = new Rule({ selector: 'a' })
+  rule.raws.before = '\n</style>'
+  rule.raws.after = '</style>'
+  rule.append(new Declaration({ prop: 'color', value: '</style>' }))
+  root.append(rule)
+
+  is(
+    root.toString(),
+    '\\3c /style> {}\n' +
+      '@media \\3c style>;\n' +
+      '/* \\3c /style>\\3c !--\\3c style> */\n' +
+      'a {\n' +
+      '    color: \\3c /style>' +
+      '\\3c /style>}'
+  )
+})
+
+test('escapes </style in parsed declaration value', () => {
+  let css = 'body { content: "</style><script>alert(1)</script><style>"; }'
+  let root = parse(css)
+  is(
+    root.toString(),
+    'body { content: "\\3c /style><script>alert(1)</script>\\3c style>"; }'
+  )
+})
+
+test('escapes </style in rule own semicolon', () => {
+  let root = new Root()
+  let rule = new Rule({ selector: 'a' })
+  rule.raws.ownSemicolon = '</style>'
+  root.append(rule)
+
+  is(root.toString(), 'a {}\\3c /style>')
+})
+
+test('does not escape Document raws', () => {
+  let document = new Document()
+  let root1 = new Root()
+  root1.append(new Rule({ selector: 'a' }))
+  let root2 = new Root({ raws: { after: '</style>' } })
+  root2.raws.before = '</style>'
+  root2.append(new Rule({ selector: 'b' }))
+  document.append(root1)
+  document.append(root2)
+
+  is(document.toString(), 'a {}</style>b {}</style>')
+})
+
+test('escapes </style in root raws and ignores case', () => {
+  let root = parse('a{color:red}')
+  root.raws.after = '</STYLE><script>alert(1)</script>'
+  is(root.toString(), 'a{color:red}\\3c /STYLE><script>alert(1)</script>')
+})
+
+test('does not escape tags other than style', () => {
+  let root = parse('a{content:"<styles> <stylesheet <div>"}')
+  is(root.toString(), 'a{content:"<styles> <stylesheet <div>"}')
+})
+
 test.run()
